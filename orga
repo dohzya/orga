@@ -1,0 +1,206 @@
+#!/usr/bin/env ruby
+
+require 'thor'
+require 'chronic'
+
+require 'pathname'
+class Pathname ; alias / + ; end
+
+$HERE = Pathname.new(__dir__)
+$THEIR = Pathname.new(".")
+
+module Helpers
+
+  def parse_date(str)
+    Chronic.parse(str.gsub(/[.]/, ' '))
+  end
+  def parse_date_with_name(str)
+    date, name = nil
+    if str =~ /(.*)-(.*)/
+      date, name = $1, $2
+    else
+      date = str
+    end
+    date = parse_date(date)
+    if date || name
+      [date, name]
+    else
+      [nil, str]
+    end
+  end
+  def glob(str)
+    s0 = str
+    s1 = s0.gsub(/[.]/, '\.')
+    s2 = s1.gsub(/[*]/, '.*')
+    Regexp.new(s2, 'i')
+  end
+  def run_cmd(cmd)
+    puts "$ #{cmd}" if $VERBOSE
+    system cmd unless $DEBUG
+  end
+  def die(str)
+    warn str
+    exit 1
+  end
+  def open_file(file)
+    run_cmd "open #{file}"
+  end
+  def remove_file(file)
+    file.unlink
+  end
+  def create_file(file, content=nil)
+    file.open("w") { |f|
+      f << content if content
+    }
+  end
+  def create_and_open_file(file, content=nil)
+    create_file file, content
+    open_file file
+  end
+  def open_or_create_file(file, content=nil)
+    if file.exist?
+      open_file file
+    else
+      create_and_open_file file, content
+    end
+  end
+
+end
+
+module Orga
+
+  module Conf
+    class << self
+      def points_dir() Pathname.new("_Points") end
+      def clients_dir() Pathname.new(".") end
+      def file_suffix() ".ft" end
+      def file_suffix_ptn() Regexp.escape(file_suffix) end
+    end
+  end
+
+  class Point < Thor
+    include Helpers
+
+    no_commands {
+      def filter(filter)
+        date, name = if filter then parse_date_with_name(filter) else nil end
+        Conf.points_dir.entries.map {|entry|
+          if entry.basename.to_path =~ /^(\d{4})-(\d{2})-(\d{2})-(.*)#{Conf.file_suffix_ptn}$/
+            entry_date = Time.new($1.to_i, $2.to_i, $3.to_i)
+            entry_name = $4
+            if date && entry_date < date
+            elsif name && entry_name !~ glob(name)
+            else
+              [date, entry]
+            end
+          end
+        }.compact.sort_by{|(d, e)| d }.map{|(d, e)| e }
+      end
+    }
+
+    desc "add <name> <presents>", "Adds a point"
+    def add(name, presents)
+      presents = presents.split(",").map{|t| "@#{t.upcase}" }.sort
+
+      date = Time.now.strftime("%Y-%m-%d")
+      filename = "%s-%s.ft" % [date, name]
+      file = Conf.points_dir + filename
+
+      create_and_open_file file, <<CONTENT
+\# #{date} — #{name} — #{presents.join(" - ")}
+
+CONTENT
+    end
+
+    desc "open <ref>", "Open a point"
+    def open(ref)
+      files = filter(ref)
+      case files.length
+      when 0
+        die "No file found for pattern '#{ref}'"
+      when 1
+        open_file(Conf.points_dir / files.first)
+      else
+        die "Too many files found for pattern '#{ref}'"
+      end
+    end
+
+    desc "last [ref]", "Open a point"
+    def last(*ref)
+      files = filter(ref.first)
+      case files.length
+      when 0
+        die "No file found for pattern '#{ref}'"
+      else
+        open_file(Conf.points_dir / files.last)
+      end
+    end
+
+    desc "list [filter]", "List points"
+    def list(*ref)
+      filter(ref.first).each {|entry|
+        puts entry.to_path
+      }
+    end
+
+    desc "rm <ref>", "Remove a point"
+    def rm(ref)
+      files = filter(ref)
+      case files.length
+      when 0
+        die "No file found for pattern '#{ref}'"
+      when 1
+        remove_file(Conf.points_dir / files.first)
+      else
+        die "Too many files found for pattern '#{ref}'"
+      end
+    end
+
+  end
+
+  class Client < Thor
+    include Helpers
+
+    desc "open <name>", "Open a client"
+    def open(name)
+      file = Conf.clients_dir + (name + Conf.file_suffix)
+      open_or_create_file file, <<-CONTENT
+# #{name}
+
+      CONTENT
+    end
+
+  end
+
+  class Project < Thor
+    include Helpers
+
+    desc "open <client name> <name>", "Open a project"
+    def open(client_name, name)
+      dir = Conf.clients_dir + client_name
+      file = dir + (name + Conf.file_suffix)
+      dir.mkpath
+      open_or_create_file file, <<-CONTENT
+# #{client_name} — #{name}
+
+        CONTENT
+    end
+
+  end
+
+  class Main < Thor
+    include Helpers
+
+    desc "point SUBCOMMAND ...ARGS", "Manage points"
+    subcommand "point", Point
+
+    desc "client SUBCOMMAND ...ARGS", "Manage clients"
+    subcommand "client", Client
+
+    desc "project SUBCOMMAND ...ARGS", "Manage projects"
+    subcommand "project", Project
+
+  end
+end
+
+Orga::Main.start(ARGV)
