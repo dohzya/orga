@@ -214,6 +214,13 @@ CONTENT
         CONTENT
     end
 
+    desc "rm <client name> <name>", "Remove a project"
+    def rm(client_name, name)
+      dir = Conf.clients_dir + client_name
+      file = dir + (name + Conf.file_suffix)
+      file.unlink if file.file?
+    end
+
   end
 
   class Main < Thor
