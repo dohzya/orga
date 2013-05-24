@@ -107,14 +107,16 @@ CONTENT
 
     desc "open <ref>", "Open a point"
     def open(ref)
-      files = filter(ref)
-      case files.length
+      points = filter(ref)
+      case points.length
       when 0
-        die "No file found for pattern '#{ref}'"
+        die "No point found for pattern '#{ref}'"
       when 1
-        open_file(Conf.points_dir / files.first)
+        open_file(Conf.points_dir / points.first)
       else
-        die "Too many files found for pattern '#{ref}'"
+        msg = ["Too many points found for pattern '#{ref}':"] +
+              points.map {|point| point.to_path }
+        die msg.join("\n")
       end
     end
 
@@ -131,8 +133,8 @@ CONTENT
 
     desc "list [filter]", "List points"
     def list(*ref)
-      filter(ref.first).each {|entry|
-        puts entry.to_path
+      filter(ref.first).each {|point|
+        puts point.to_path
       }
     end
 
@@ -141,11 +143,11 @@ CONTENT
       files = filter(ref)
       case files.length
       when 0
-        die "No file found for pattern '#{ref}'"
+        die "No point found for pattern '#{ref}'"
       when 1
         remove_file(Conf.points_dir / files.first)
       else
-        die "Too many files found for pattern '#{ref}'"
+        die "Too many points found for pattern '#{ref}'"
       end
     end
 
