@@ -14,18 +14,12 @@ $THEIR = Pathname.new(".")
 module Helpers
 
   def parse_date(str)
-    Chronic.parse(str.gsub(/[.]/, ' '))
+    Chronic.parse(str.gsub(/[.]/, ' ')) unless str.to_s.empty?
   end
   def parse_date_with_name(str)
-    date, name = nil
-    if str =~ /(.*)-(.*)/
-      date, name = $1, $2
-    else
-      date = str
-    end
     date = parse_date(date)
-    if date || name
-      [date, name]
+    if date
+      [date, nil]
     else
       [nil, str]
     end
@@ -85,15 +79,15 @@ module Orga
 
     no_commands {
       def filter(filter)
-        date, name = if filter then parse_date_with_name(filter) else nil end
-        Conf.points_dir.entries.map {|entry|
-          if entry.basename.to_path =~ /^(\d{4})-(\d{2})-(\d{2})-(.*)#{Conf.file_suffix_ptn}$/
-            entry_date = Time.new($1.to_i, $2.to_i, $3.to_i)
-            entry_name = $4
-            if date && entry_date < date
-            elsif name && entry_name !~ glob(name)
+        date, name = filter && parse_date_with_name(filter)
+        Conf.points_dir.entries.map {|point|
+          point_name = point.basename.to_path
+          if point_name =~ /^(\d{4})-(\d{2})-(\d{2})-(.*)#{Conf.file_suffix_ptn}$/
+            point_date = Time.new($1.to_i, $2.to_i, $3.to_i)
+            if date && point_date < date
+            elsif name && point_name !~ glob(name)
             else
-              [date, entry]
+              [date, point]
             end
           end
         }.compact.sort_by{|(d, e)| d }.map{|(d, e)| e }
@@ -163,13 +157,48 @@ CONTENT
   class Client < Thor
     include Helpers
 
+    no_commands {
+      def filter(filter)
+        Conf.clients_dir.entries.map {|client|
+          if client.basename.to_path =~ /^(\.|_)/
+          elsif !client.file?
+          elsif filter && client.basename.to_path !~ glob(filter)
+          else
+            client
+          end
+        }.compact.sort
+      end
+    }
+
     desc "open <name>", "Open a client"
     def open(name)
-      file = Conf.clients_dir + (name + Conf.file_suffix)
-      open_or_create_file file, <<-CONTENT
+      clients = filter(name)
+      case clients.length
+      when 0
+        client = Conf.clients_dir + (name + Conf.file_suffix)
+        create_and_open_file client, <<-CONTENT
 # #{name}
 
-      CONTENT
+        CONTENT
+      when 1
+        open_file clients.first
+      else
+        msg = ["Too many clients found for pattern '#{name}':"] +
+              clients.map {|client| client.to_path }
+        die msg.join("\n")
+      end
+    end
+
+    # rename
+    #   - rename dir
+    #   - rename file
+    #   - commit
+
+    desc "list [ref]", "List clients"
+    def list(*ref)
+      filter(ref.first).each {|client|
+        puts client.to_path
+      }
     end
 
   end
