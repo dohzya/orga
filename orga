@@ -203,6 +203,35 @@ CONTENT
   class Project < Thor
     include Helpers
 
+    no_commands {
+      def filter(filter)
+        f = ->(entry, always) {
+          entry.entries.map {|project|
+            if project.basename.to_path =~ /^(\.|_)/
+            else
+              project = entry / project
+              if project.file?
+                if always or !filter || project.basename.to_path =~ glob(filter)
+                  project
+                end
+              elsif project.directory?
+                f.(project, always || !filter || project.basename.to_path =~ glob(filter))
+              else
+                die "File '#{project.relative_path_from($THEIR)}' is nor a file nor a directory"
+              end
+            end
+          }.compact.sort
+        }
+        Conf.clients_dir.entries.map {|client|
+          if client.basename.to_path =~ /^(\.|_)/
+          elsif !client.directory?
+          else
+            f.(client, !filter || client.basename.to_path =~ glob(filter))
+          end
+        }.flatten.compact.sort
+      end
+    }
+
     desc "open <client name> <name>", "Open a project"
     def open(client_name, name)
       dir = Conf.clients_dir + client_name
@@ -219,6 +248,16 @@ CONTENT
       dir = Conf.clients_dir + client_name
       file = dir + (name + Conf.file_suffix)
       file.unlink if file.file?
+    end
+
+    desc "list [ref]", "List projects"
+    def list(*ref)
+      filter(ref.first).each {|project|
+        puts project.to_path
+                    .gsub(/#{Conf.file_suffix_ptn}/, '')
+                    .gsub(/\//, ' — ')
+                    .gsub(/_/, ' ')
+      }
     end
 
   end
