@@ -6,10 +6,37 @@ class Pathname ; alias / + ; end
 
 require 'thor'
 require 'chronic'
+require 'rugged'
 
+=begin
+# TODO
+  - look inside files and get
+    - H1 lines
+    - tags
+    - people
+=end
 
 $HERE = Pathname.new(__dir__)
 $THEIR = Pathname.new(".")
+
+begin
+  $REPO = Rugged::Repository.new($THEIR.to_path)
+rescue
+  $REPO = repo = Rugged::Repository.init_at($THEIR.to_path, false)
+  todo = $THEIR / "_Todo.ft"
+  todo.open("w"){|f| f << '# .todo\n\n' }
+  index = $REPO.index
+  index.add(todo.to_path)
+  options = {
+    tree: index.write_tree,
+    author: { :email => repo.config['user.email'], :name => repo.config['user.name'], :time => Time.now },
+    committer: { :email => repo.config['user.email'], :name => repo.config['user.name'], :time => Time.now },
+    message: "init",
+    parents: [],
+    update_ref: 'HEAD',
+  }
+  Rugged::Commit.create(repo, options)
+end
 
 module Helpers
 
@@ -57,6 +84,23 @@ module Helpers
     create_file file, content unless file.exist?
     open_file file
   end
+
+  # GIT {{{
+  def repo() $REPO end
+  def index() repo.index end
+  def commit_file(file, msg)
+    index.add(file.path)
+    options = {
+      tree: index.write_tree,
+      author: { :email => repo.config['user.email'], :name => repo.config['user.name'], :time => Time.now },
+      committer: { :email => repo.config['user.email'], :name => repo.config['user.name'], :time => Time.now },
+      message: msg,
+      parents: repo.empty? ? [] : [ repo.head.target ].compact,
+      update_ref: 'HEAD',
+    }
+    Rugged::Commit.create(repo, options)
+  end
+  # }}}
 
 end
 
