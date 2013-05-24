@@ -1,11 +1,12 @@
 #!/usr/bin/env ruby
 
 require 'yaml'
+require 'pathname'
+class Pathname ; alias / + ; end
+
 require 'thor'
 require 'chronic'
 
-require 'pathname'
-class Pathname ; alias / + ; end
 
 $HERE = Pathname.new(__dir__)
 $THEIR = Pathname.new(".")
