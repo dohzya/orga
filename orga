@@ -54,11 +54,8 @@ module Helpers
     open_file file
   end
   def open_or_create_file(file, content=nil)
-    if file.exist?
-      open_file file
-    else
-      create_and_open_file file, content
-    end
+    create_file file, content unless file.exist?
+    open_file file
   end
 
 end
