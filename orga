@@ -262,6 +262,16 @@ CONTENT
 
   end
 
+  class Todo < Thor
+    include Helpers
+
+    desc "open", "Open todos"
+    def open
+      run_cmd "open #{$THEIR / ("_Todo" + Conf.file_suffix)}"
+    end
+
+  end
+
   class Main < Thor
     include Helpers
 
@@ -273,6 +283,9 @@ CONTENT
 
     desc "project SUBCOMMAND ...ARGS", "Manage projects"
     subcommand "project", Project
+
+    desc "todo SUBCOMMAND ...ARGS", "Manage todos"
+    subcommand "todo", Todo
 
     Links = YAML.load_file($THEIR / "_Links.yml")
     desc "open SUBCOMMAND ...ARGS", "Open links"
